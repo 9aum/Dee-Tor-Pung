@@ -24,12 +24,14 @@ export const ConfirmationModal = ({
                     <Text style={styles.message}>{message}</Text>
 
                     <View style={styles.buttonRow}>
-                        <TouchableOpacity
-                            style={[styles.button, styles.cancelButton]}
-                            onPress={onCancel}
-                        >
-                            <Text style={styles.cancelText}>{cancelText}</Text>
-                        </TouchableOpacity>
+                        {cancelText && (
+                            <TouchableOpacity
+                                style={[styles.button, styles.cancelButton]}
+                                onPress={onCancel}
+                            >
+                                <Text style={styles.cancelText}>{cancelText}</Text>
+                            </TouchableOpacity>
+                        )}
 
                         <TouchableOpacity
                             style={[styles.button, { backgroundColor: confirmColor }]}

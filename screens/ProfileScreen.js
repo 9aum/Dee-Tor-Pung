@@ -7,7 +7,6 @@ import {
     TouchableOpacity,
     ScrollView,
     Image,
-    Alert,
     ActivityIndicator
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -19,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '../context/LanguageContext';
 import { useToast } from '../context/ToastContext';
 import { ConfirmationModal } from '../components/ConfirmationModal';
+import { SelectionModal } from '../components/SelectionModal';
 import ErrorModal from '../components/ErrorModal';
 
 export default function ProfileScreen({ navigation }) {
@@ -30,9 +30,14 @@ export default function ProfileScreen({ navigation }) {
     // Error State
     const [showErrorModal, setShowErrorModal] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
+    const [errorTitle, setErrorTitle] = useState('');
 
     // Reset Modal State
     const [showResetModal, setShowResetModal] = useState(false);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
+
+    // Image Picker Modal State
+    const [showImageSourceModal, setShowImageSourceModal] = useState(false);
 
     // Profile State
     const [nickname, setNickname] = useState('');
@@ -65,20 +70,7 @@ export default function ProfileScreen({ navigation }) {
     };
 
     const pickImage = () => {
-        Alert.alert(t('choose_image'), '', [
-            {
-                text: t('take_photo'),
-                onPress: openCamera,
-            },
-            {
-                text: t('choose_album'),
-                onPress: openGallery,
-            },
-            {
-                text: t('cancel'),
-                style: 'cancel',
-            },
-        ]);
+        setShowImageSourceModal(true);
     };
 
     const openGallery = async () => {
@@ -102,7 +94,9 @@ export default function ProfileScreen({ navigation }) {
         try {
             const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
             if (permissionResult.granted === false) {
-                Alert.alert(t('camera_permission'), t('camera_permission_desc'));
+                setErrorTitle(t('camera_permission'));
+                setErrorMessage(t('camera_permission_desc'));
+                setShowErrorModal(true);
                 return;
             }
 
@@ -182,9 +176,8 @@ export default function ProfileScreen({ navigation }) {
             const { resetDatabase } = require('../services/database');
             await resetDatabase(db);
             setShowResetModal(false);
-            Alert.alert(t('success'), t('reset_success'), [
-                { text: t('ok'), onPress: () => navigation.navigate('Dashboard') }
-            ]);
+            setShowResetModal(false);
+            setTimeout(() => setShowSuccessModal(true), 100);
         } catch (e) {
             setErrorMessage(e.toString());
             setShowErrorModal(true);
@@ -293,6 +286,7 @@ export default function ProfileScreen({ navigation }) {
 
             <ErrorModal
                 visible={showErrorModal}
+                title={errorTitle}
                 errorText={errorMessage}
                 onClose={() => setShowErrorModal(false)}
             />
@@ -307,6 +301,44 @@ export default function ProfileScreen({ navigation }) {
                 confirmColor="#FF5252"
                 onConfirm={confirmReset}
                 onCancel={() => setShowResetModal(false)}
+            />
+
+            {/* Success Modal */}
+            <ConfirmationModal
+                visible={showSuccessModal}
+                title={t('success')}
+                message={t('reset_success')}
+                confirmText={t('ok')}
+                cancelText={null}
+                confirmColor="#4cd137"
+                onConfirm={() => {
+                    setShowSuccessModal(false);
+                    navigation.navigate('Dashboard');
+                }}
+            />
+
+            {/* Image Source Selection Modal */}
+            <SelectionModal
+                visible={showImageSourceModal}
+                title={t('choose_image')}
+                onClose={() => setShowImageSourceModal(false)}
+                options={[
+                    {
+                        text: t('take_photo'),
+                        icon: 'camera',
+                        onPress: openCamera
+                    },
+                    {
+                        text: t('choose_album'),
+                        icon: 'images',
+                        onPress: openGallery
+                    },
+                    {
+                        text: t('cancel'),
+                        isCancel: true,
+                        onPress: () => setShowImageSourceModal(false)
+                    }
+                ]}
             />
         </ScrollView>
     );

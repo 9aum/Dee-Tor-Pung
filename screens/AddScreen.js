@@ -7,7 +7,6 @@ import {
     TouchableOpacity,
     ScrollView,
     Image,
-    Alert,
     ActivityIndicator,
     Platform
 } from 'react-native';
@@ -19,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import ErrorModal from '../components/ErrorModal';
 import { ConfirmationModal } from '../components/ConfirmationModal';
+import { SelectionModal } from '../components/SelectionModal';
 import { useLanguage } from '../context/LanguageContext';
 import { useToast } from '../context/ToastContext';
 
@@ -43,7 +43,9 @@ export default function AddScreen({ navigation, route }) {
     // Modals
     const [showErrorModal, setShowErrorModal] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
+    const [errorTitle, setErrorTitle] = useState('');
     const [duplicateModal, setDuplicateModal] = useState({ visible: false, data: null });
+    const [showImageSourceModal, setShowImageSourceModal] = useState(false);
 
     React.useLayoutEffect(() => {
         navigation.setOptions({ title: t('tab_add') });
@@ -131,25 +133,15 @@ export default function AddScreen({ navigation, route }) {
 
     const pickImage = () => {
         if (images.length >= 3) {
-            Alert.alert(t('full_limit'), t('full_limit_desc'));
+            setErrorTitle(t('full_limit'));
+            setErrorMessage(t('full_limit_desc'));
+            setShowErrorModal(true);
             return;
         }
-
-        Alert.alert(t('choose_image'), '', [
-            {
-                text: t('take_photo'),
-                onPress: openCamera,
-            },
-            {
-                text: t('choose_album'),
-                onPress: openGallery,
-            },
-            {
-                text: t('cancel'),
-                style: 'cancel',
-            },
-        ]);
+        setShowImageSourceModal(true);
     };
+
+    // ... openGallery, openCamera, removeImage unchanged ...
 
     const openGallery = async () => {
         try {
@@ -171,7 +163,9 @@ export default function AddScreen({ navigation, route }) {
         try {
             const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
             if (permissionResult.granted === false) {
-                Alert.alert(t('camera_permission'), t('camera_permission_desc'));
+                setErrorTitle(t('camera_permission'));
+                setErrorMessage(t('camera_permission_desc'));
+                setShowErrorModal(true);
                 return;
             }
 
@@ -193,10 +187,13 @@ export default function AddScreen({ navigation, route }) {
     };
 
     const saveToDb = async () => {
+        // ... unchanged ...
         if (isSubmitting.current) return;
 
         if (!weight && !distance && !duration) {
-            Alert.alert(t('missing_data'), t('missing_data_desc'));
+            setErrorTitle(t('missing_data'));
+            setErrorMessage(t('missing_data_desc'));
+            setShowErrorModal(true);
             return;
         }
 
@@ -320,7 +317,8 @@ export default function AddScreen({ navigation, route }) {
                 <DateTimePicker
                     value={date}
                     mode="date"
-                    display="default"
+                    display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                    themeVariant="light"
                     onChange={onChangeDate}
                     maximumDate={new Date()}
                 />
@@ -393,6 +391,7 @@ export default function AddScreen({ navigation, route }) {
             {/* Error Modal */}
             <ErrorModal
                 visible={showErrorModal}
+                title={errorTitle}
                 errorText={errorMessage}
                 onClose={() => setShowErrorModal(false)}
             />
@@ -407,6 +406,30 @@ export default function AddScreen({ navigation, route }) {
                 confirmColor="#4A90E2" // Blue for 'Edit'
                 onConfirm={confirmEditDuplicate}
                 onCancel={cancelDuplicate}
+            />
+
+            {/* Image Source Selection Modal */}
+            <SelectionModal
+                visible={showImageSourceModal}
+                title={t('choose_image')}
+                onClose={() => setShowImageSourceModal(false)}
+                options={[
+                    {
+                        text: t('take_photo'),
+                        icon: 'camera',
+                        onPress: openCamera
+                    },
+                    {
+                        text: t('choose_album'),
+                        icon: 'images',
+                        onPress: openGallery
+                    },
+                    {
+                        text: t('cancel'),
+                        isCancel: true,
+                        onPress: () => setShowImageSourceModal(false)
+                    }
+                ]}
             />
         </ScrollView>
     );

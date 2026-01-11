@@ -1,5 +1,6 @@
-import React, { Suspense } from 'react';
-import { StyleSheet, View, Text, ActivityIndicator } from 'react-native';
+import React, { Suspense, useEffect } from 'react';
+import { StyleSheet, View, Text, ActivityIndicator, Platform } from 'react-native';
+import * as NavigationBar from 'expo-navigation-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -140,6 +141,13 @@ function RootStack() {
 }
 
 export default function App() {
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      NavigationBar.setBackgroundColorAsync("white");
+      NavigationBar.setButtonStyleAsync("dark");
+    }
+  }, []);
+
   return (
     <Suspense fallback={<LoadingFallback />}>
       <LanguageProvider>

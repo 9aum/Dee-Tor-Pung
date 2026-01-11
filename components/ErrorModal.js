@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import * as Clipboard from 'expo-clipboard';
 
-export default function ErrorModal({ visible, errorText, onClose }) {
+export default function ErrorModal({ visible, errorText, onClose, title }) {
     const handleCopy = async () => {
         await Clipboard.setStringAsync(errorText);
         alert('คัดลอกข้อความแล้ว (Copied to Clipboard)');
@@ -21,7 +21,7 @@ export default function ErrorModal({ visible, errorText, onClose }) {
                 <View style={styles.modalView}>
                     <View style={styles.header}>
                         <Ionicons name="warning" size={30} color="#FF6B6B" />
-                        <Text style={styles.modalTitle}>เกิดข้อผิดพลาด</Text>
+                        <Text style={styles.modalTitle}>{title || 'เกิดข้อผิดพลาด'}</Text>
                     </View>
 
                     <Text style={styles.instruction}>กดปุ่มเพื่อคัดลอก (Copy)</Text>
