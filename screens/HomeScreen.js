@@ -1,3 +1,14 @@
+/**
+ * HomeScreen.js (Dashboard)
+ * 
+ * หน้าแรกของแอป แสดงภาพรวมข้อมูล (Dashboard)
+ * หน้าที่หลัก:
+ * 1. ดึงข้อมูลสรุปรายเดือน (น้ำหนักเฉลี่ย, ระยะทางรวม) จากฐานข้อมูล
+ * 2. แสดงกราฟแนวโน้มน้ำหนัก (Line Chart)
+ * 3. สุ่มแสดงรูปภาพที่เคยบันทึกไว้ (Slider)
+ * 4. แสดงคำคมและรูปโปรไฟล์
+ */
+
 import React, { useState, useCallback, useLayoutEffect } from 'react';
 import {
     StyleSheet,
@@ -8,21 +19,22 @@ import {
     Image,
     Dimensions
 } from 'react-native';
-import { useSQLiteContext } from 'expo-sqlite';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useSQLiteContext } from 'expo-sqlite'; // Hook เชื่อมต่อฐานข้อมูล
+import { useFocusEffect, useNavigation } from '@react-navigation/native'; // Hook สำหรับรู้ว่าหน้าจอถูกโฟกัส
 import { Ionicons } from '@expo/vector-icons';
-import { LineChart } from 'react-native-chart-kit';
+import { LineChart } from 'react-native-chart-kit'; // ไลบรารีกราฟ
 
 import { useLanguage } from '../context/LanguageContext';
 
-const { width } = Dimensions.get('window');
+const { width } = Dimensions.get('window'); // หาความกว้างหน้าจอ
 
 export default function HomeScreen() {
     const db = useSQLiteContext();
     const navigation = useNavigation();
     const { t, language } = useLanguage();
 
-    const [currentDate, setCurrentDate] = useState(new Date());
+    // -- State Variables --
+    const [currentDate, setCurrentDate] = useState(new Date()); // เดือนปัจจุบันที่แสดงโชว์
     const [stats, setStats] = useState({
         avgWeight: 0,
         totalDist: 0,
@@ -41,19 +53,25 @@ export default function HomeScreen() {
         quote: 'สู้ๆ นะครับ'
     });
 
+    /**
+     * loadDashboard()
+     * ฟังก์ชันหัวใจหลัก: ดึงข้อมูลสรุปจาก DB มาแสดง
+     */
     const loadDashboard = async () => {
+        // เตรียมตัวแปรสำหรับ Query เดือน (เช่น '2025-01%')
         const year = currentDate.getFullYear();
         const month = String(currentDate.getMonth() + 1).padStart(2, '0');
         const monthPrefix = `${year}-${month}`;
 
         try {
-            // 1. Load Profile
+            // 1. ดึงข้อมูลโปรไฟล์ (ชื่อรูป, คำคม)
             const profileResult = await db.getFirstAsync("SELECT * FROM profile WHERE id = 1");
             if (profileResult) {
                 let randomQuote = "สู้ๆ นะครับ";
                 if (profileResult.quotes) {
-                    const quotesArr = JSON.parse(profileResult.quotes);
+                    const quotesArr = JSON.parse(profileResult.quotes); // แปลง JSON String กลับเป็น Array
                     if (quotesArr.length > 0) {
+                        // สุ่มคำคม 1 อัน
                         randomQuote = quotesArr[Math.floor(Math.random() * quotesArr.length)];
                     }
                 }
@@ -64,7 +82,8 @@ export default function HomeScreen() {
                 });
             }
 
-            // 2. Stats
+            // 2. คำนวณสถิติ (Stats) ด้วย SQL Aggregate Functions
+            // AVG = หาค่าเฉลี่ย, SUM = หาผลรวม
             const statsResult = await db.getAllAsync(
                 `SELECT 
           AVG(CASE WHEN weight > 0 THEN weight ELSE NULL END) as avgWeight, 
@@ -72,10 +91,10 @@ export default function HomeScreen() {
           SUM(duration_min) as totalTime 
          FROM logs 
          WHERE date LIKE ?`,
-                [`${monthPrefix}%`]
+                [`${monthPrefix}%`] // ค้นหาเฉพาะเดือนนี้ (เช่น date ขึ้นต้นด้วย '2025-01')
             );
 
-            // 3. Chart
+            // 3. เตรียมข้อมูลกราฟ
             const chartResult = await db.getAllAsync(
                 `SELECT date, weight FROM logs 
          WHERE date LIKE ? AND weight > 0 
@@ -83,13 +102,14 @@ export default function HomeScreen() {
                 [`${monthPrefix}%`]
             );
 
-            // 4. Images
+            // 4. ดึงรูปภาพทั้งหมดของเดือนนี้มาโชว์สไลด์
             const imageResult = await db.getAllAsync(
                 `SELECT image_uris FROM logs WHERE date LIKE ? AND image_uris IS NOT NULL`,
                 [`${monthPrefix}%`]
             );
 
-            // Set Stats
+            // -- Update State UI --
+
             const row = statsResult[0];
             setStats({
                 avgWeight: row?.avgWeight ? row.avgWeight.toFixed(1) : "0.0",
@@ -97,10 +117,12 @@ export default function HomeScreen() {
                 totalTime: row?.totalTime ? row.totalTime : 0
             });
 
-            // Set Chart
+            // ปั้นข้อมูลใส่กราฟ (Chart Data)
             if (chartResult.length > 0) {
-                const labels = chartResult.map(item => new Date(item.date).getDate().toString());
-                const data = chartResult.map(item => item.weight);
+                const labels = chartResult.map(item => new Date(item.date).getDate().toString()); // แกน X: วันที่
+                const data = chartResult.map(item => item.weight); // แกน Y: น้ำหนัก
+
+                // ลดจำนวน Label แกน X เพื่อไม่ให้รกเกินไป (โชว์ตัวเว้น 3 ตัว)
                 const optimizedLabels = labels.map((l, i) =>
                     (i === 0 || i === labels.length - 1 || i % 4 === 0) ? l : ''
                 );
@@ -109,7 +131,7 @@ export default function HomeScreen() {
                 setChartData({ labels: ["Start"], datasets: [{ data: [0] }] });
             }
 
-            // Set Slider
+            // สุ่มรูปภาพ 5 รูปมาแสดง
             let allImages = [];
             imageResult.forEach(row => {
                 if (row.image_uris) {
@@ -117,6 +139,7 @@ export default function HomeScreen() {
                     allImages = [...allImages, ...uris];
                 }
             });
+            // เทคนิคการสุ่มแบบบ้านๆ: sort random แล้วตัดมา 5 อัน
             setSlideImages(allImages.sort(() => 0.5 - Math.random()).slice(0, 5));
 
         } catch (error) {
@@ -124,13 +147,14 @@ export default function HomeScreen() {
         }
     };
 
+    // useFocusEffect: ทำงานทุกครั้งที่หน้านี้ถูกเปิดขึ้นมา (หรือกดกลับมาหน้านี้)
     useFocusEffect(
         useCallback(() => {
             loadDashboard();
-        }, [currentDate])
+        }, [currentDate]) // ถ้าเปลี่ยนเดือน (currentDate เปลี่ยน) ก็โหลดใหม่ด้วย
     );
 
-    // Set Header Profile Icon
+    // ปรับแต่ง Header ด้านบน (แสดงรูปโปรไฟล์ และชื่อ)
     useLayoutEffect(() => {
         navigation.setOptions({
             headerLeft: () => (
@@ -162,13 +186,13 @@ export default function HomeScreen() {
     return (
         <ScrollView style={styles.container}>
 
-            {/* Quote Banner */}
+            {/* Quote Banner (คำคม) */}
             <View style={styles.quoteContainer}>
                 <Ionicons name="chatbubble-ellipses-outline" size={20} color="#4A90E2" style={{ marginRight: 8 }} />
                 <Text style={styles.quoteText}>"{profile.quote}"</Text>
             </View>
 
-            {/* 1. Compact Header */}
+            {/* 1. Month Selector (ปุ่มเปลี่ยนเดือน) */}
             <View style={styles.monthSelector}>
                 <TouchableOpacity onPress={() => changeMonth(-1)} style={styles.arrowBtn}>
                     <Ionicons name="chevron-back" size={20} color="#666" />
@@ -179,7 +203,7 @@ export default function HomeScreen() {
                 </TouchableOpacity>
             </View>
 
-            {/* 2. Compact Chart */}
+            {/* 2. Compact Chart (กราฟเส้น) */}
             <View style={styles.chartContainer}>
                 <Text style={styles.chartTitle}>{t('weight_trend')}</Text>
                 {chartData.datasets[0].data[0] !== 0 ? (
@@ -207,7 +231,7 @@ export default function HomeScreen() {
                 )}
             </View>
 
-            {/* 3. Compact Stats */}
+            {/* 3. Compact Stats (การ์ดแสดงสถิติ 3 ช่อง) */}
             <View style={styles.statsContainer}>
                 <View style={[styles.statCard, { backgroundColor: '#E3F2FD' }]}>
                     <Ionicons name="scale-outline" size={20} color="#4A90E2" />
@@ -226,7 +250,7 @@ export default function HomeScreen() {
                 </View>
             </View>
 
-            {/* 4. Compact Slider */}
+            {/* 4. Compact Slider (สไลด์รูปภาพ) */}
             <View style={styles.sliderContainer}>
                 <Text style={styles.sectionTitle}>{t('summary_7_days')}</Text>
                 {slideImages.length > 0 ? (

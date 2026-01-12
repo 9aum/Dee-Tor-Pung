@@ -1,3 +1,14 @@
+/**
+ * ProfileScreen.js
+ * 
+ * หน้า "โปรไฟล์และการตั้งค่า"
+ * ฟีเจอร์หลัก:
+ * 1. แก้ไขข้อมูลส่วนตัว (ชื่อเล่น, เป้าหมาย, รูปโปรไฟล์)
+ * 2. จัดการคำคม (Quotes) ที่จะไปโชว์หน้า Dashboard
+ * 3. เปลี่ยนภาษา (ไทย <-> อังกฤษ)
+ * 4. ล้างข้อมูลทั้งหมด (Reset Database) **อันตราย**
+ */
+
 import React, { useState, useEffect } from 'react';
 import {
     StyleSheet,
@@ -12,7 +23,7 @@ import {
 import { useSQLiteContext } from 'expo-sqlite';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
-import * as LegacyFileSystem from 'expo-file-system/legacy';
+import * as LegacyFileSystem from 'expo-file-system/legacy'; // จัดการไฟล์
 import { Ionicons } from '@expo/vector-icons';
 
 import { useLanguage } from '../context/LanguageContext';
@@ -23,7 +34,7 @@ import ErrorModal from '../components/ErrorModal';
 
 export default function ProfileScreen({ navigation }) {
     const db = useSQLiteContext();
-    const { t, language, switchLanguage } = useLanguage();
+    const { t, language, switchLanguage } = useLanguage(); // ใช้ Hook ภาษา เพื่อสลับภาษา
     const { showToast } = useToast();
     const [loading, setLoading] = useState(false);
 
@@ -32,27 +43,29 @@ export default function ProfileScreen({ navigation }) {
     const [errorMessage, setErrorMessage] = useState('');
     const [errorTitle, setErrorTitle] = useState('');
 
-    // Reset Modal State
+    // Reset Modal State (สำหรับปุ่มล้างข้อมูล)
     const [showResetModal, setShowResetModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
 
     // Image Picker Modal State
     const [showImageSourceModal, setShowImageSourceModal] = useState(false);
 
-    // Profile State
+    // Profile Data State
     const [nickname, setNickname] = useState('');
     const [goal, setGoal] = useState('');
     const [imageUri, setImageUri] = useState(null);
     const [quotes, setQuotes] = useState([]);
 
-    // Input for new quote
+    // Input สำหรับเพิ่มคำคมใหม่
     const [newQuote, setNewQuote] = useState('');
 
     useEffect(() => {
         loadProfile();
+        // อัปเดต Title ของ Header ตามภาษาที่เลือก
         navigation.setOptions({ title: t('tab_profile') });
-    }, [language]); // Reload title when language changes
+    }, [language]);
 
+    // โหลดข้อมูล Profile จาก DB
     const loadProfile = async () => {
         try {
             const result = await db.getFirstAsync("SELECT * FROM profile WHERE id = 1");
@@ -77,8 +90,8 @@ export default function ProfileScreen({ navigation }) {
         try {
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                allowsEditing: true,
-                aspect: [1, 1],
+                allowsEditing: true, // อนุญาตให้ Crop
+                aspect: [1, 1], // บังคับสัดส่วน 1:1 (สี่เหลี่ยมจัตุรัส)
                 quality: 0.5,
             });
 
@@ -114,6 +127,7 @@ export default function ProfileScreen({ navigation }) {
         }
     };
 
+    // เพิ่มคำคมลงใน Array
     const addQuote = () => {
         if (newQuote.trim().length > 0) {
             setQuotes([...quotes, newQuote.trim()]);
@@ -121,42 +135,45 @@ export default function ProfileScreen({ navigation }) {
         }
     };
 
+    // ลบคำคมออกจาก Array ตาม Index
     const deleteQuote = (index) => {
         const updated = quotes.filter((_, i) => i !== index);
         setQuotes(updated);
     };
 
+    /**
+     * saveProfile()
+     * บันทึกข้อมูลทั้งหมดลงตาราง profile
+     */
     const saveProfile = async () => {
         setLoading(true);
         try {
             let finalImageUri = imageUri;
 
-            // If image is temporary (from picker), save to permanent location
+            // ตรวจสอบ: ถ้ารูปภาพยังเป็น Temporary (แคช) ต้องย้ายไปที่ Document Directory ก่อน
             if (imageUri && !imageUri.includes(LegacyFileSystem.documentDirectory)) {
                 const filename = 'profile_' + Date.now() + '.jpg';
                 const newPath = LegacyFileSystem.documentDirectory + filename;
 
-                // Robust Save: Try copyAsync first (standard), fallback to moveAsync (if permission issue?)
+                // พยายามใช้ copyAsync ก่อน ถ้าไม่ได้ค่อยใช้ moveAsync
                 try {
                     await LegacyFileSystem.copyAsync({ from: imageUri, to: newPath });
                 } catch (copyError) {
                     console.log("copyAsync failed, trying moveAsync", copyError);
-                    // Fallback
                     await LegacyFileSystem.moveAsync({ from: imageUri, to: newPath });
                 }
 
                 finalImageUri = newPath;
             }
 
+            // Update ข้อมูลลง DB
             await db.runAsync(
                 `UPDATE profile SET nickname = ?, goal = ?, image_uri = ?, quotes = ? WHERE id = 1`,
                 [nickname, goal, finalImageUri, JSON.stringify(quotes)]
             );
 
             showToast(t('save_success'), 'success');
-            // Alert.alert('สำเร็จ', 'บันทึกข้อมูลเรียบร้อย', [
-            //     { text: 'OK', onPress: () => navigation.goBack() }
-            // ]);
+
         } catch (error) {
             console.error(error);
             setErrorMessage(error.toString());
@@ -170,13 +187,15 @@ export default function ProfileScreen({ navigation }) {
         setShowResetModal(true);
     };
 
+    // ยืนยันการล้างข้อมูล (เรียกใช้ฟังก์ชัน resetDatabase จาก service)
     const confirmReset = async () => {
         try {
             setLoading(true);
             const { resetDatabase } = require('../services/database');
             await resetDatabase(db);
+
             setShowResetModal(false);
-            setShowResetModal(false);
+            // รอแป๊บนึงค่อยโชว์ Success Msg
             setTimeout(() => setShowSuccessModal(true), 100);
         } catch (e) {
             setErrorMessage(e.toString());
@@ -188,6 +207,7 @@ export default function ProfileScreen({ navigation }) {
 
     return (
         <ScrollView style={styles.container}>
+            {/* Header: รูปโปรไฟล์ */}
             <View style={styles.header}>
                 <TouchableOpacity onPress={pickImage} style={styles.imagePicker}>
                     {imageUri ? (
@@ -204,7 +224,7 @@ export default function ProfileScreen({ navigation }) {
                 <Text style={styles.hint}>{t('change_photo')}</Text>
             </View>
 
-            {/* Language Switcher */}
+            {/* Language Switcher (ปุ่มเปลี่ยนภาษา) */}
             <View style={styles.langContainer}>
                 <Text style={styles.label}>{t('language')}</Text>
                 <View style={styles.langRow}>
@@ -223,6 +243,7 @@ export default function ProfileScreen({ navigation }) {
                 </View>
             </View>
 
+            {/* Form: ชื่อเล่น, เป้าหมาย */}
             <View style={styles.form}>
                 <Text style={styles.label}>{t('nickname')}</Text>
                 <TextInput
@@ -241,6 +262,7 @@ export default function ProfileScreen({ navigation }) {
                     multiline
                 />
 
+                {/* ส่วนจัดการคำคม */}
                 <Text style={styles.label}>{t('quotes')} ({quotes.length})</Text>
                 <View style={styles.addQuoteRow}>
                     <TextInput
@@ -263,6 +285,7 @@ export default function ProfileScreen({ navigation }) {
                     </View>
                 ))}
 
+                {/* ปุ่มบันทึก */}
                 <TouchableOpacity
                     style={[styles.saveBtn, loading && styles.disabledBtn]}
                     onPress={saveProfile}
@@ -275,6 +298,7 @@ export default function ProfileScreen({ navigation }) {
                     )}
                 </TouchableOpacity>
 
+                {/* ปุ่มล้างข้อมูลทั้งหมด (สีแดง) */}
                 <TouchableOpacity
                     style={[styles.saveBtn, { backgroundColor: '#FF6B6B', marginTop: 0 }]}
                     onPress={handleReset}

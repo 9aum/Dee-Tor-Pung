@@ -1,18 +1,26 @@
+/**
+ * ErrorModal.js
+ * 
+ * ใช้แสดง "หน้าต่างแจ้งเตือนข้อผิดพลาด" (Error Popup)
+ * ความพิเศษคือ: มีปุ่มให้ Copy ข้อความ Error ได้ เพื่อส่งให้ Developer ดูง่ายๆ
+ */
+
 import React from 'react';
 import { Modal, View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import * as Clipboard from 'expo-clipboard';
+import * as Clipboard from 'expo-clipboard'; // ไลบรารีสำหรับ Copy paste
 
 export default function ErrorModal({ visible, errorText, onClose, title }) {
+    // ฟังก์ชัน Copy ข้อความลง Clipboard
     const handleCopy = async () => {
-        await Clipboard.setStringAsync(errorText);
-        alert('คัดลอกข้อความแล้ว (Copied to Clipboard)');
+        await Clipboard.setStringAsync(errorText); // สั่ง Copy
+        alert('คัดลอกข้อความแล้ว (Copied to Clipboard)'); // แจ้งผู้ใช้
     };
 
     return (
         <Modal
-            animationType="slide"
+            animationType="slide" // เลื่อนขึ้นมาจากด้านล่าง
             transparent={true}
             visible={visible}
             onRequestClose={onClose}
@@ -26,8 +34,10 @@ export default function ErrorModal({ visible, errorText, onClose, title }) {
 
                     <Text style={styles.instruction}>กดปุ่มเพื่อคัดลอก (Copy)</Text>
 
+                    {/* ใช้ ScrollView เผื่อข้อความ Error ยาวมากๆ */}
                     <View style={styles.logContainer}>
                         <ScrollView style={{ maxHeight: 200 }}>
+                            {/* ใช้ TextInput เพื่อให้ผู้ใช้สามารถเลือก Copy บางส่วนได้ด้วย (Editable=true แต่เราไม่ได้เอาค่าไปใช้) */}
                             <TextInput
                                 style={styles.logText}
                                 value={errorText}
@@ -39,6 +49,7 @@ export default function ErrorModal({ visible, errorText, onClose, title }) {
                     </View>
 
                     <View style={styles.buttonRow}>
+                        {/* ปุ่ม Copy */}
                         <TouchableOpacity
                             style={[styles.closeButton, { backgroundColor: '#4cd137', marginRight: 10 }]}
                             onPress={handleCopy}
@@ -46,6 +57,7 @@ export default function ErrorModal({ visible, errorText, onClose, title }) {
                             <Text style={styles.textStyle}>คัดลอก (Copy)</Text>
                         </TouchableOpacity>
 
+                        {/* ปุ่มปิด */}
                         <TouchableOpacity
                             style={[styles.closeButton, { backgroundColor: '#2196F3' }]}
                             onPress={onClose}

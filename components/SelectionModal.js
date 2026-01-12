@@ -1,3 +1,10 @@
+/**
+ * SelectionModal.js
+ * 
+ * ใช้สำหรับ "ตัวเลือก" (Menu Popup) เช่น เลือกรูปภาพจากกล้อง หรือ อัลบั้ม
+ * รับค่า options เป็น Array แล้ววนลูปสร้างปุ่มตามจำนวน
+ */
+
 import React from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet, TouchableWithoutFeedback } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,22 +17,26 @@ export const SelectionModal = ({ visible, title, options, onClose }) => {
             visible={visible}
             onRequestClose={onClose}
         >
+            {/* TouchableWithoutFeedback + onClose: กดพื้นที่ว่างๆ เพื่อปิด Modal */}
             <TouchableWithoutFeedback onPress={onClose}>
                 <View style={styles.overlay}>
+                    {/* กดที่ตัว Modal เอง ไม่ต้องทำอะไร (ป้องกัน event ทะลุไปปิด) */}
                     <TouchableWithoutFeedback>
                         <View style={styles.modalContainer}>
                             {title && <Text style={styles.title}>{title}</Text>}
 
+                            {/* วนลูป options เพื่อสร้างปุ่มตามรายการที่ส่งมา */}
                             {options.map((option, index) => (
                                 <TouchableOpacity
                                     key={index}
                                     style={[
                                         styles.optionBtn,
-                                        option.isDestructive && styles.destructiveBtn,
-                                        option.isCancel && styles.cancelBtn
+                                        option.isDestructive && styles.destructiveBtn, // ถ้าเป็นปุ่มอันตราย (สีแดง)
+                                        option.isCancel && styles.cancelBtn // ถ้าเป็นปุ่มยกเลิก
                                     ]}
                                     onPress={() => {
                                         option.onPress();
+                                        // ถ้าไม่ได้สั่งให้เปิดค้างไว้ -> ปิดปุ่มทันทีที่กด
                                         if (!option.stayOpen) onClose();
                                     }}
                                 >

@@ -1,9 +1,19 @@
+/**
+ * ListScreen.js
+ * 
+ * หน้าแสดงรายการประวัติ (History Log)
+ * หลักการทำงาน:
+ * 1. ใช้ FlatList เพื่อแสดงข้อมูลจำนวนมากอย่างมีประสิทธิภาพ
+ * 2. มีระบบ Pagination (โหลดทีละ 10 รายการ) เมื่อเลื่อนลงล่างสุด
+ * 3. สามารถกด Edit (ไปหน้า Add) หรือ Delete ได้
+ */
+
 import React, { useState, useCallback } from 'react';
 import {
     StyleSheet,
     Text,
     View,
-    FlatList,
+    FlatList, // Component พระเอกสำหรับแสดงรายการยาวๆ
     Image,
     Dimensions,
     TouchableOpacity,
@@ -23,30 +33,38 @@ export default function ListScreen({ navigation }) {
     const { t, language } = useLanguage();
     const { showToast } = useToast();
 
-    const [items, setItems] = useState([]);
-    const [offset, setOffset] = useState(0);
-    const [hasMore, setHasMore] = useState(true);
+    // -- State --
+    const [items, setItems] = useState([]); // เก็บรายการทั้งหมดที่จะแสดง
+    const [offset, setOffset] = useState(0); // ตัวนับว่าโหลดไปถึงไหนแล้ว (Pagination)
+    const [hasMore, setHasMore] = useState(true); // ยังมีข้อมูลเหลือให้โหลดอีกไหม
     const [isLoading, setIsLoading] = useState(false);
-    const limit = 10;
+    const limit = 10; // โหลดทีละ 10 รายการ
 
-    // Image Modal State
+    // State สำหรับ Modal ดูรูปภาพขยายใหญ่
     const [modalVisible, setModalVisible] = useState(false);
     const [selectedImage, setSelectedImage] = useState(null);
 
-    // Delete Modal State
+    // State สำหรับ Modal ยืนยันการลบ
     const [deleteModal, setDeleteModal] = useState({ visible: false, id: null });
 
+    // ตั้งชื่อหน้าจอที่ Header Bar
     React.useLayoutEffect(() => {
         navigation.setOptions({ title: t('tab_list') });
     }, [navigation, language]);
 
+    /**
+     * loadData()
+     * ฟังก์ชันโหลดข้อมูลจาก SQLite
+     * reset = true เมื่อต้องการโหลดใหม่ทั้งหมด (เช่น ตอนเปิดหน้าจอมาใหม่)
+     */
     const loadData = async (reset = false) => {
-        if (isLoading) return;
-        if (!hasMore && !reset) return;
+        if (isLoading) return; // ถ้ากำลังโหลดอยู่ อย่าเพิ่งโหลดซ้ำ
+        if (!hasMore && !reset) return; // ถ้าข้อมูลหมดแล้ว และไม่ได้สั่งรีเซ็ต ก็ไม่ต้องทำอะไร
 
         setIsLoading(true);
         try {
             const currentOffset = reset ? 0 : offset;
+            // LIMIT ? OFFSET ? คือหัวใจของ Pagination (ดึงข้อมูลทีละส่วน)
             const result = await db.getAllAsync(
                 `SELECT * FROM logs ORDER BY date DESC LIMIT ? OFFSET ?`,
                 [limit, currentOffset]
@@ -55,18 +73,19 @@ export default function ListScreen({ navigation }) {
             if (reset) {
                 setItems(result);
                 setOffset(limit);
-                setHasMore(result.length === limit);
+                setHasMore(result.length === limit); // ถ้าดึงได้ครบ 10 แปลว่าน่าจะมีอีก
             } else {
                 if (result.length > 0) {
                     setItems(prev => {
+                        // ป้องกัน ID ซ้ำ (เผื่อ Logic ผิดพลาด)
                         const existingIds = new Set(prev.map(i => i.id));
                         const uniqueNew = result.filter(i => !existingIds.has(i.id));
-                        return [...prev, ...uniqueNew];
+                        return [...prev, ...uniqueNew]; // ต่อท้ายรายการเดิม
                     });
                     setOffset(prev => prev + limit);
                     setHasMore(result.length === limit);
                 } else {
-                    setHasMore(false);
+                    setHasMore(false); // หมดแล้วจ้า
                 }
             }
         } catch (error) {
@@ -76,20 +95,24 @@ export default function ListScreen({ navigation }) {
         }
     };
 
+    // โหลดข้อมูลใหม่ทุกครั้งที่เข้ามาที่หน้านี้
     useFocusEffect(
         useCallback(() => {
             loadData(true);
         }, [])
     );
 
+    // แก้ไข: ส่งข้อมูลเดิม (item) ไปหน้า Add เพื่อให้กรอกข้อมูลเดิมรอไว้
     const handleEdit = (item) => {
         navigation.navigate('Add', { existingLog: item });
     };
 
+    // ลบ: เปิด Modal ยืนยันก่อน
     const handleDelete = (id) => {
         setDeleteModal({ visible: true, id });
     };
 
+    // ยืนยันลบจริง
     const confirmDelete = async () => {
         const idToDelete = deleteModal.id;
         if (!idToDelete) return;
@@ -97,7 +120,7 @@ export default function ListScreen({ navigation }) {
         try {
             await db.runAsync(`DELETE FROM logs WHERE id = ?`, [idToDelete]);
 
-            // Remove from list locally
+            // ลบออกจาก State ทันที ไม่ต้องโหลดใหม่จาก DB ให้เสียเวลา
             setItems(prev => prev.filter(item => item.id !== idToDelete));
 
             showToast(t('delete_success'), 'success');
@@ -113,16 +136,19 @@ export default function ListScreen({ navigation }) {
         setModalVisible(true);
     };
 
+    // ฟังก์ชันย่อยสำหรับ render แต่ละรายการ (Card)
     const renderItem = ({ item }) => {
         const dateObj = new Date(item.date);
         const dateStr = dateObj.toLocaleDateString(language === 'en' ? 'en-US' : 'th-TH', {
             year: 'numeric', month: 'short', day: 'numeric'
         });
 
+        // แปลง JSON String กลับเป็น Array รูปภาพ
         const images = item.image_uris ? JSON.parse(item.image_uris) : [];
 
         return (
             <View style={styles.card}>
+                {/* Header การ์ด: วันที่ + ปุ่มแก้ไข/ลบ */}
                 <View style={styles.cardHeader}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                         <Ionicons name="time-outline" size={14} color="#888" />
@@ -139,6 +165,7 @@ export default function ListScreen({ navigation }) {
                     </View>
                 </View>
 
+                {/* Body การ์ด: ข้อมูลน้ำหนัก/ออกกำลังกาย */}
                 <View style={styles.cardBody}>
                     <View style={styles.infoCol}>
                         {item.weight > 0 && (
@@ -164,6 +191,7 @@ export default function ListScreen({ navigation }) {
                     </View>
                 </View>
 
+                {/* Footer การ์ด: รูปภาพ (ถ้ามี) */}
                 {images.length > 0 && (
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageScroll}>
                         {images.map((img, idx) => (
@@ -183,6 +211,7 @@ export default function ListScreen({ navigation }) {
                 data={items}
                 renderItem={renderItem}
                 keyExtractor={item => item.id.toString()}
+                // เมื่อเลื่อนถึงขอบล่าง 50% ให้โหลดเพิ่ม
                 onEndReached={() => {
                     if (!isLoading) loadData(false);
                 }}
@@ -193,7 +222,7 @@ export default function ListScreen({ navigation }) {
                 }
             />
 
-            {/* Full Screen Image Modal */}
+            {/* Modal ดูรูปเต็มจอ */}
             <Modal
                 visible={modalVisible}
                 transparent={true}
@@ -216,7 +245,7 @@ export default function ListScreen({ navigation }) {
                 </View>
             </Modal>
 
-            {/* Delete Confirmation Modal */}
+            {/* Modal ยืนยันลบ */}
             <ConfirmationModal
                 visible={deleteModal.visible}
                 title={t('confirm_delete_title')}

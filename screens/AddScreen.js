@@ -1,3 +1,14 @@
+/**
+ * AddScreen.js
+ * 
+ * หน้าสำหรับ "บันทึกข้อมูล" (Add/Edit)
+ * ฟีเจอร์หลัก:
+ * 1. ฟอร์มกรอกข้อมูล: วันที่, น้ำหนัก, ระยะทาง, เวลา
+ * 2. จัดการรูปภาพ: ถ่ายรูป/เลือกจากอัลบั้ม (สูงสุด 3 รูป)
+ * 3. บันทึกข้อมูลลงฐานข้อมูล (Insert/Update)
+ * 4. ป้องกันการบันทึกซ้ำวันที่เดิม (Duplicate Check)
+ */
+
 import React, { useState, useRef } from 'react';
 import {
     StyleSheet,
@@ -11,11 +22,12 @@ import {
     Platform
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import * as ImagePicker from 'expo-image-picker';
+import * as ImagePicker from 'expo-image-picker'; // ห้องสมุดจัดการรูปภาพ
 import * as FileSystem from 'expo-file-system';
-import * as LegacyFileSystem from 'expo-file-system/legacy';
+import * as LegacyFileSystem from 'expo-file-system/legacy'; // ใช้สำหรับจัดการไฟล์ (Move/Copy)
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker from '@react-native-community/datetimepicker'; // ปฏิทินเลือกวันที่
+
 import ErrorModal from '../components/ErrorModal';
 import { ConfirmationModal } from '../components/ConfirmationModal';
 import { SelectionModal } from '../components/SelectionModal';
@@ -26,21 +38,23 @@ export default function AddScreen({ navigation, route }) {
     const db = useSQLiteContext();
     const { t } = useLanguage();
     const { showToast } = useToast();
-    const isSubmitting = useRef(false);
+    const isSubmitting = useRef(false); // กันเบิ้ล (กดปุ่มรัวๆ)
 
-    // State for form
+    // -- State Variables --
     const [date, setDate] = useState(new Date());
     const [showDatePicker, setShowDatePicker] = useState(false);
+
+    // ข้อมูลฟอร์ม
     const [weight, setWeight] = useState('');
     const [distance, setDistance] = useState('');
     const [duration, setDuration] = useState('');
-    const [images, setImages] = useState([]);
+    const [images, setImages] = useState([]); // เก็บ URI ของรูปภาพ (Array)
     const [loading, setLoading] = useState(false);
 
-    // Edit Mode State
+    // Edit Mode: ถ้ามี ID แสดงว่ากำลังแก้ไข (ไม่ใช่สร้างใหม่)
     const [editingId, setEditingId] = useState(null);
 
-    // Modals
+    // Modals State
     const [showErrorModal, setShowErrorModal] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
     const [errorTitle, setErrorTitle] = useState('');
@@ -51,7 +65,7 @@ export default function AddScreen({ navigation, route }) {
         navigation.setOptions({ title: t('tab_add') });
     }, [navigation, t]);
 
-    // Load data if editing
+    // ตรวจสอบว่าถูกส่งมาจากหน้า Edit หรือไม่?
     React.useEffect(() => {
         if (route.params?.existingLog) {
             const item = route.params.existingLog;
@@ -64,6 +78,7 @@ export default function AddScreen({ navigation, route }) {
         }
     }, [route.params]);
 
+    // ล้างฟอร์มทั้งหมด
     const resetForm = () => {
         setWeight('');
         setDistance('');
@@ -74,16 +89,23 @@ export default function AddScreen({ navigation, route }) {
         navigation.setParams({ existingLog: null });
     };
 
+    // เมื่อเลือกวันที่เสร็จ
     const onChangeDate = async (event, selectedDate) => {
         const currentDate = selectedDate || date;
-        setShowDatePicker(Platform.OS === 'ios');
+        setShowDatePicker(Platform.OS === 'ios'); // iOS ให้โชว์ค้างไว้ตาม Style, Android ปิดอัตโนมัติ
 
+        // ถ้าเปลี่ยนวันที่ ให้เช็คว่า "วันนี้เคยบันทึกไปแล้วหรือยัง?"
         if (currentDate.toDateString() !== date.toDateString()) {
             await checkDuplicateDate(currentDate);
         }
         setDate(currentDate);
     };
 
+    /**
+     * checkDuplicateDate(checkDate)
+     * ตรวจสอบว่าวันที่นี้มีข้อมูลใน DB แล้วหรือยัง?
+     * เพื่อป้องกันการบันทึกข้อมูลซ้ำซ้อนในวันเดียวกัน (Business Logic)
+     */
     const checkDuplicateDate = async (checkDate) => {
         try {
             const year = checkDate.getFullYear();
@@ -97,11 +119,11 @@ export default function AddScreen({ navigation, route }) {
             );
 
             if (result) {
-                // If editing the same ID, it's not a duplicate
+                // ถ้าเจอข้อมูลซ้ำ แต่เป็น ID เดียวกันกับที่กำลังแก้ไขอยู่ -> ถือว่าไม่ซ้ำ (ผ่าน)
                 if (editingId && result.id === editingId) {
                     return null;
                 }
-                // Show Custom Modal instead of Alert
+                // ถ้าซ้ำกับคนอื่น -> แจ้งเตือนผู้ใช้ถามว่าจะทับข้อมูลเดิมเลยไหม
                 setDuplicateModal({ visible: true, data: result });
                 return result;
             }
@@ -112,10 +134,11 @@ export default function AddScreen({ navigation, route }) {
         }
     };
 
+    // ถ้าเจอปัญหาข้อมูลซ้ำ แล้ว user เลือก "แก้ไขทับของเดิม" (Overwrite)
     const confirmEditDuplicate = () => {
         const result = duplicateModal.data;
         if (result) {
-            setEditingId(result.id);
+            setEditingId(result.id); // เปลี่ยนโหมดเป็น Edit ID นั้นแทน
             setWeight(result.weight ? result.weight.toString() : '');
             setDistance(result.distance ? result.distance.toString() : '');
             setDuration(result.duration_min ? result.duration_min.toString() : '');
@@ -127,8 +150,7 @@ export default function AddScreen({ navigation, route }) {
 
     const cancelDuplicate = () => {
         setDuplicateModal({ visible: false, data: null });
-        // Optional: Reset date to today if cancelled? 
-        // For now, let user keep the selected date but just cancel the overwrite action.
+        // Optional: อาจจะดีดกลับไปวันที่เดิม หรือ ปล่อยไว้
     };
 
     const pickImage = () => {
@@ -141,14 +163,13 @@ export default function AddScreen({ navigation, route }) {
         setShowImageSourceModal(true);
     };
 
-    // ... openGallery, openCamera, removeImage unchanged ...
-
+    // เลือกรูปจาก Gallery
     const openGallery = async () => {
         try {
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                allowsEditing: true,
-                quality: 0.5,
+                allowsEditing: true, // ให้ Crop รูปได้
+                quality: 0.5, // ลดคุณภาพเหลือ 50% เพื่อประหยัดพื้นที่
             });
 
             if (!result.canceled) {
@@ -159,6 +180,7 @@ export default function AddScreen({ navigation, route }) {
         }
     };
 
+    // ถ่ายรูปใหม่
     const openCamera = async () => {
         try {
             const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
@@ -186,10 +208,14 @@ export default function AddScreen({ navigation, route }) {
         setImages(images.filter((_, index) => index !== indexToRemove));
     };
 
+    /**
+     * saveToDb()
+     * ฟังก์ชันบันทึกข้อมูลหลัก
+     */
     const saveToDb = async () => {
-        // ... unchanged ...
         if (isSubmitting.current) return;
 
+        // Validation: ต้องกรอกอย่างน้อย 1 อย่าง (น้ำหนัก, ระยะทาง หรือ เวลา)
         if (!weight && !distance && !duration) {
             setErrorTitle(t('missing_data'));
             setErrorMessage(t('missing_data_desc'));
@@ -197,25 +223,24 @@ export default function AddScreen({ navigation, route }) {
             return;
         }
 
-        // Check for duplicates before saving
-        // Only check if we are NOT already editing a specific ID (or if date changed significantly)
-        // logic: checkDuplicateDate returns the existing record if found.
+        // เช็ครอบสุดท้ายก่อนบันทึก
         const duplicate = await checkDuplicateDate(date);
-
-        // If duplicate found and we are not just updating it (handled inside checkDuplicateDate logic for self-id), stop.
         if (duplicate) {
-            return;
+            return; // ถ้าซ้ำ ให้รอ User ตัดสินใจจาก Modal (ที่เด้งขึ้นมาจาก checkDuplicateDate)
         }
 
         isSubmitting.current = true;
         setLoading(true);
         try {
+            // 1. จัดการย้ายไฟล์รูปภาพ
+            // รูปที่เลือกมา (Cache) ต้องย้ายไปเก็บที่ Document Directory ของแอป เพื่อให้ถาวร
             const savedImageUris = [];
             for (const uri of images) {
                 try {
                     const filename = uri.split('/').pop();
                     const newPath = LegacyFileSystem.documentDirectory + filename;
 
+                    // ลองย้ายไฟล์
                     await LegacyFileSystem.moveAsync({
                         from: uri,
                         to: newPath
@@ -223,7 +248,10 @@ export default function AddScreen({ navigation, route }) {
 
                     savedImageUris.push(newPath);
                 } catch (imgError) {
+                    // ถ้าย้ายไม่ได้ (เช่น เป็นไฟล์เดิมอยู่แล้ว) ให้ใช้ Copy แทน
                     try {
+                        const filename = uri.split('/').pop();
+                        const newPath = LegacyFileSystem.documentDirectory + filename;
                         await LegacyFileSystem.copyAsync({ from: uri, to: newPath });
                         savedImageUris.push(newPath);
                     } catch (retryError) {
@@ -234,7 +262,9 @@ export default function AddScreen({ navigation, route }) {
 
             const isoDate = date.toISOString();
 
+            // 2. บันทึกลงฐานข้อมูล
             if (editingId) {
+                // กรณีแก้ไข (Update)
                 await db.runAsync(
                     `UPDATE logs SET date = ?, weight = ?, distance = ?, duration_min = ?, image_uris = ? WHERE id = ?`,
                     [
@@ -247,6 +277,7 @@ export default function AddScreen({ navigation, route }) {
                     ]
                 );
             } else {
+                // กรณีเพิ่มใหม่ (Insert)
                 await db.runAsync(
                     `INSERT INTO logs (date, weight, distance, duration_min, image_uris) VALUES (?, ?, ?, ?, ?)`,
                     [
@@ -277,13 +308,13 @@ export default function AddScreen({ navigation, route }) {
     return (
         <ScrollView style={styles.container} contentContainerStyle={styles.content}>
 
-            {/* Row 1: General Info Section */}
+            {/* ส่วนที่ 1: ข้อมูลทั่วไป (วันที่, น้ำหนัก) */}
             <View style={styles.sectionBox}>
                 <Text style={styles.sectionTitle}>
                     {editingId ? t('edit_data') : t('today_data')}
                 </Text>
                 <View style={styles.row}>
-                    {/* Date Picker */}
+                    {/* ปุ่มเลือกวันที่ */}
                     <View style={[styles.col, { flex: 1.6 }]}>
                         <Text style={styles.subLabel}>{t('date')}</Text>
                         <TouchableOpacity
@@ -297,7 +328,7 @@ export default function AddScreen({ navigation, route }) {
                         </TouchableOpacity>
                     </View>
 
-                    {/* Weight */}
+                    {/* ช่องกรอกน้ำหนัก */}
                     <View style={styles.col}>
                         <Text style={styles.subLabel}>{t('weight')}</Text>
                         <View style={styles.inputWrapper}>
@@ -314,6 +345,7 @@ export default function AddScreen({ navigation, route }) {
                 </View>
             </View>
 
+            {/* Date Picker Component (แสดงเมื่อกดปุ่มวันที่) */}
             {showDatePicker && (
                 <DateTimePicker
                     value={date}
@@ -325,7 +357,7 @@ export default function AddScreen({ navigation, route }) {
                 />
             )}
 
-            {/* Row 2: Exercise Section */}
+            {/* ส่วนที่ 2: การออกกำลังกาย */}
             <View style={styles.sectionBox}>
                 <Text style={styles.sectionTitle}>{t('exercise')}</Text>
                 <View style={styles.row}>
@@ -358,7 +390,7 @@ export default function AddScreen({ navigation, route }) {
                 </View>
             </View>
 
-            {/* Row 3: Images */}
+            {/* ส่วนที่ 3: รูปภาพ */}
             <View style={styles.rowCenter}>
                 {images.map((uri, index) => (
                     <View key={index} style={styles.imageWrapper}>
@@ -378,7 +410,7 @@ export default function AddScreen({ navigation, route }) {
                 )}
             </View>
 
-            {/* Save Button */}
+            {/* ปุ่มบันทึก */}
             <TouchableOpacity
                 style={[styles.saveButton, loading && styles.disabledButton]}
                 onPress={saveToDb}
@@ -391,7 +423,7 @@ export default function AddScreen({ navigation, route }) {
                 )}
             </TouchableOpacity>
 
-            {/* Error Modal */}
+            {/* Popup แสดง Error ต่างๆ */}
             <ErrorModal
                 visible={showErrorModal}
                 title={errorTitle}
@@ -399,7 +431,7 @@ export default function AddScreen({ navigation, route }) {
                 onClose={() => setShowErrorModal(false)}
             />
 
-            {/* Custom Confirmation Modal */}
+            {/* Popup ยืนยันกรณีวันที่ซ้ำ */}
             <ConfirmationModal
                 visible={duplicateModal.visible}
                 title={t('duplicate_date_title')}
@@ -411,7 +443,7 @@ export default function AddScreen({ navigation, route }) {
                 onCancel={cancelDuplicate}
             />
 
-            {/* Image Source Selection Modal */}
+            {/* Popup เลือกรูปภาพ (กล้อง/อัลบั้ม) */}
             <SelectionModal
                 visible={showImageSourceModal}
                 title={t('choose_image')}
