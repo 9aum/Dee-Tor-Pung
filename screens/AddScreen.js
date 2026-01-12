@@ -305,6 +305,7 @@ export default function AddScreen({ navigation, route }) {
                                 style={styles.inputCompact}
                                 keyboardType="numeric"
                                 placeholder="0.0"
+                                placeholderTextColor="#999"
                                 value={weight}
                                 onChangeText={setWeight}
                             />
@@ -335,6 +336,7 @@ export default function AddScreen({ navigation, route }) {
                                 style={styles.inputCompact}
                                 keyboardType="numeric"
                                 placeholder="0.0"
+                                placeholderTextColor="#999"
                                 value={distance}
                                 onChangeText={setDistance}
                             />
@@ -347,6 +349,7 @@ export default function AddScreen({ navigation, route }) {
                                 style={styles.inputCompact}
                                 keyboardType="numeric"
                                 placeholder="0"
+                                placeholderTextColor="#999"
                                 value={duration}
                                 onChangeText={setDuration}
                             />
@@ -497,7 +500,7 @@ const styles = StyleSheet.create({
     inputCompact: {
         paddingHorizontal: 10,
         fontSize: 18, // Standardized large font
-        color: '#333',
+        color: '#000000',
         textAlign: 'center',
         fontWeight: 'bold',
     },
